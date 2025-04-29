@@ -1,13 +1,18 @@
 from dotenv import load_dotenv
 from langchain.tools import tool
-from langchain.prompts import PromptTemplate
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.runnables.base import RunnableSerializable
+from langchain.prompts import PromptTemplate, BasePromptTemplate
 from langchain.tools.render import render_text_description
 from langchain_openai import ChatOpenAI
 from langchain.agents.output_parsers import ReActSingleInputOutputParser
 from langchain.agents.format_scratchpad.log import format_log_to_str
 from langchain.schema import AgentAction, AgentFinish
-from langchain.tools import Tool
-from typing import List, Union
+from langchain.tools import Tool, BaseTool
+from typing import List, Union, TypeAlias, Tuple, Never
+
+AgentStep: TypeAlias = Union[AgentAction, AgentFinish]
+AgentStepObservation: TypeAlias = Tuple[AgentStep, str]
 
 @tool
 def get_text_length(text: str) -> int:
@@ -19,7 +24,7 @@ def get_text_length(text: str) -> int:
     return len(text)
 
 
-def find_tool_by_name(tools: List[Tool], tool_name: str) -> Tool:
+def find_tool_by_name(tools: List[BaseTool], tool_name: str) -> BaseTool:
     """
     Find a tool by its name in the list of tools.
     """
@@ -34,7 +39,7 @@ if __name__ == "__main__":
     load_dotenv()
     print("ReAct langchanin")
 
-    tools = [get_text_length]
+    tools: List[BaseTool] = [get_text_length]
 
     template = """
         Answer the following questions as best you can. You have access to the following tools:
@@ -58,19 +63,19 @@ if __name__ == "__main__":
         Thought: {agent_scratchpad}
     """
 
-    prompt = PromptTemplate.from_template(template=template).partial(
+    prompt: BasePromptTemplate = PromptTemplate.from_template(template=template).partial(
         tools=render_text_description(tools), tool_names=", ".join([t.name for t in tools])
     )
 
-    llm = ChatOpenAI(temperature=0, stop=["\nObservation"], model="gpt-4o-mini")
-    intermediate_steps = []
-    agent = (
+    llm: BaseChatModel = ChatOpenAI(temperature=0, model="gpt-4o-mini", stop=["\nObservation"]) # type: ignore
+    intermediate_steps: List[AgentStepObservation] = []
+    agent: RunnableSerializable = (
         {"input": lambda x: x["input"], "agent_scratchpad": lambda x: format_log_to_str(x["agent_scratchpad"])}
         | prompt
         | llm
         | ReActSingleInputOutputParser()
     )
-    agent_step : Union[AgentAction, AgentFinish] = agent.invoke(
+    agent_step: AgentStep = agent.invoke(
         {
             "input": "What is the length of 'DOG' in char acters?",
             "agent_scratchpad": intermediate_steps
@@ -82,11 +87,11 @@ if __name__ == "__main__":
         tool_name = agent_step.tool
         tool_to_use = find_tool_by_name(tools, tool_name)
         tool_input = agent_step.tool_input
-        observation = tool_to_use.func(str(tool_input))
+        observation = tool_to_use.func(str(tool_input)) # type: ignore
         print(f"Observation: {observation}")
         intermediate_steps.append((agent_step, str(observation)))
 
-    agent_step : Union[AgentAction, AgentFinish] = agent.invoke(
+    agent_step = agent.invoke(
         {
             "input": "What is the length of 'DOG' in char acters?",
             "agent_scratchpad": intermediate_steps
