@@ -11,6 +11,8 @@ from langchain.schema import AgentAction, AgentFinish
 from langchain.tools import Tool, BaseTool
 from typing import List, Union, TypeAlias, Tuple, Never
 
+from callbacks import AgentCallbackHandler
+
 AgentStep: TypeAlias = Union[AgentAction, AgentFinish]
 AgentStepObservation: TypeAlias = Tuple[AgentStep, str]
 
@@ -67,7 +69,9 @@ if __name__ == "__main__":
         tools=render_text_description(tools), tool_names=", ".join([t.name for t in tools])
     )
 
-    llm: BaseChatModel = ChatOpenAI(temperature=0, model="gpt-4o-mini", stop=["\nObservation"]) # type: ignore
+    llm: BaseChatModel = ChatOpenAI(
+        temperature=0, model="gpt-4o-mini", stop=["\nObservation"], callbacks=[AgentCallbackHandler()]
+    ) # type: ignore
     intermediate_steps: List[AgentStepObservation] = []
     agent: RunnableSerializable = (
         {"input": lambda x: x["input"], "agent_scratchpad": lambda x: format_log_to_str(x["agent_scratchpad"])}
